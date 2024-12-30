@@ -11,6 +11,7 @@ def parse_args():
     parser.add_argument(
         "--rcd_dir",
         type=str,
+        default = './demoResults',
         help="save the evaluation results (in a directory)",
     )
     parser.add_argument(
@@ -27,6 +28,7 @@ def parse_args():
     parser.add_argument(
         "--checkpoint",
         type=str,
+        default = "/content/drive/My Drive/SAT_LFG/UNET-BaseBERT/SAT_Nano_UNET.pth",
         help="Checkpoint path",
     )
     parser.add_argument(
@@ -70,6 +72,8 @@ def parse_args():
     parser.add_argument(
         "--datasets_jsonl",
         type=str,
+        default="SAT/demo/inference_demo/demo.jsonl",  # Relative path from the current directory
+        help="Path to the JSONL file containing inference dataset",
     )
     
     # Sampler and Loader
@@ -118,10 +122,13 @@ def parse_args():
     parser.add_argument(
         "--text_encoder_checkpoint",
         type=str,
+        default="/content/drive/My Drive/SAT_LFG/UNET-BaseBERT/BaseBERT.pth"
     )
     parser.add_argument(
         "--text_encoder",
         type=str,
+        default="basebert",
+        help="Specify the text encoder to use ('ours', 'medcpt', 'basebert')."
     )
 
     # MaskFormer
@@ -129,6 +136,7 @@ def parse_args():
     parser.add_argument(
         "--vision_backbone",
         type=str,
+        default = "UNET",
         help='UNET UNET-L UMamba or SwinUNETR'
     )
     parser.add_argument(

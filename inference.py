@@ -2,6 +2,10 @@ import os
 import datetime
 import random
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent / "model"))
+
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
@@ -33,34 +37,55 @@ def set_seed(config):
     cudnn.deterministic = True
 
 def main(args):
-    # set gpu
     if args.gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-        
-    torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
-    device=torch.device("cuda", int(os.environ["LOCAL_RANK"]))
-    gpu_id = int(os.environ["LOCAL_RANK"])
-    torch.distributed.init_process_group(backend="nccl", init_method='env://', timeout=datetime.timedelta(seconds=7200))   # might takes a long time to sync between process
+
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))  # Default to 0 if not set
+    device = torch.device("cuda", local_rank) if torch.cuda.is_available() else torch.device("cpu")
+    torch.cuda.set_device(local_rank)
+
+    if "WORLD_SIZE" in os.environ and int(os.environ["WORLD_SIZE"]) > 1:
+        torch.distributed.init_process_group(backend="nccl", init_method='env://', timeout=datetime.timedelta(seconds=7200))
+        rank = torch.distributed.get_rank()
+        world_size = torch.distributed.get_world_size()
+        print(f"Distributed initialized on rank {rank}")
+    else:
+        rank = 0
+        world_size = 1
+        print("Running in single GPU mode.")
+  
+    # torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+    # device=torch.device("cuda", int(os.environ["LOCAL_RANK"]))
+    # gpu_id = int(os.environ["LOCAL_RANK"])
+    # torch.distributed.init_process_group(backend="nccl", init_method='env://', timeout=datetime.timedelta(seconds=7200))   # might takes a long time to sync between process
     
-    # dispaly
-    if is_master():
-        print('** GPU NUM ** : ', torch.cuda.device_count())  # 打印gpu数量
-        print('** WORLD SIZE ** : ', torch.distributed.get_world_size())
-    rank = dist.get_rank()
-    print(f"** DDP ** : Start running DDP on rank {rank}.")
-    
-    # file to save the inference results
-    if is_master():
+    # Display information
+    if rank == 0:  # Master node or single GPU mode
+        print('** GPU NUM ** : ', torch.cuda.device_count())
+        print('** WORLD SIZE ** : ', world_size)
+        print("** DDP ** : Start running in single GPU mode or master rank.")
+
+    # Create the directory for saving results
+    if rank == 0:
         Path(args.rcd_dir).mkdir(exist_ok=True, parents=True)
         print(f'Inference Results will be Saved to ** {args.rcd_dir} **')
-
-    # dataset and loader
-    testset = Inference_Dataset(args.datasets_jsonl, args.max_queries, args.batchsize_3d)
-    sampler = DistributedSampler(testset)
-    testloader = DataLoader(testset, sampler=sampler, batch_size=1, pin_memory=args.pin_memory, num_workers=args.num_workers, collate_fn=collate_fn)
-    sampler.set_epoch(0)
     
-    # set model (by default gpu
+    # Dataset and DataLoader
+    testset = Inference_Dataset(args.datasets_jsonl, args.max_queries, args.batchsize_3d)
+
+    if world_size > 1:
+        # Distributed mode
+        sampler = DistributedSampler(testset)
+        testloader = DataLoader(testset, sampler=sampler, batch_size=1, pin_memory=args.pin_memory, num_workers=args.num_workers, collate_fn=collate_fn)
+        sampler.set_epoch(0)
+    else:
+        # Single GPU mode
+        testloader = DataLoader(testset, batch_size=1, pin_memory=args.pin_memory, num_workers=args.num_workers, collate_fn=collate_fn)
+    
+    # set model
+    gpu_id = getattr(args, 'gpu_id', None)
+    if gpu_id is None:
+        gpu_id = local_rank
     model = build_maskformer(args, device, gpu_id)
     
     # load knowledge encoder

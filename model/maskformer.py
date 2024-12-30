@@ -6,8 +6,8 @@ import torch.nn.functional as F
 import torch 
 from einops import rearrange, repeat, reduce
 from positional_encodings.torch_encodings import PositionalEncoding3D
-from dynamic_network_architectures.architectures.unet import PlainConvUNet, ResidualEncoderUNet
-from dynamic_network_architectures.initialization.weight_init import InitWeights_He
+from model.dynamic_network_architectures.architectures.unet import PlainConvUNet, ResidualEncoderUNet
+from model.dynamic_network_architectures.initialization.weight_init import InitWeights_He
 
 from .transformer_decoder import TransformerDecoder,TransformerDecoderLayer
 from .SwinUNETR import SwinUNETR

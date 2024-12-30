@@ -19,10 +19,14 @@ def get_parameter_number(model):
 
 def build_maskformer(args, device, gpu_id):
     model = Maskformer(args.vision_backbone, args.crop_size, args.patch_size, args.deep_supervision)
-
     model = model.to(device)
-    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)        
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu_id], find_unused_parameters=True)
+
+    # Use SyncBatchNorm only if WORLD_SIZE > 1
+    if int(os.environ.get("WORLD_SIZE", 1)) > 1:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu_id], find_unused_parameters=True)
+    else:
+        print("Running without DistributedDataParallel (single GPU mode).")
         
     def get_parameter_number(model):
         total_num = sum(p.numel() for p in model.parameters())
@@ -47,9 +51,11 @@ def load_checkpoint(checkpoint,
         print('** CHECKPOINT ** : Load checkpoint from %s' % (checkpoint))
     
     checkpoint = torch.load(checkpoint, map_location=device)
-        
+    
+    
     # load part of the checkpoint
     if partial_load:
+        # state_dict = {k.replace('module.', ''): v for k, v in checkpoint['model_state_dict'].items() if k.replace('module.', '') in model_dict.keys() and v.shape == model_dict[k.replace('module.', '')].shape}
         model_dict =  model.state_dict()
         # check difference
         unexpected_state_dict = [k for k in checkpoint['model_state_dict'].keys() if k not in model_dict.keys()]
@@ -57,6 +63,7 @@ def load_checkpoint(checkpoint,
         unmatchd_state_dict = [k for k,v in checkpoint['model_state_dict'].items() if k in model_dict.keys() and v.shape != model_dict[k].shape]
         # load partial parameters
         state_dict = {k:v for k,v in checkpoint['model_state_dict'].items() if k in model_dict.keys() and v.shape == model_dict[k].shape}
+        state_dict = {k.replace('module.', ''): v for k, v in checkpoint.items()}
         model_dict.update(state_dict)
         model.load_state_dict(model_dict)
         if is_master():

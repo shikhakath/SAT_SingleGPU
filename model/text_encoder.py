@@ -53,8 +53,13 @@ class Text_Encoder(nn.Module):
         
         model = class_name()
         model = model.to(device)
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)        
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu_id], find_unused_parameters=True)
+
+        # Use SyncBatchNorm and DistributedDataParallel only if process group is initialized
+        if torch.distributed.is_initialized():
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu_id], find_unused_parameters=True)
+        else:
+            print("Running Text_Encoder without DistributedDataParallel.")
         
         # load checkpoint
         if checkpoint:
